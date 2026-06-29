@@ -1,23 +1,42 @@
 """
 AAP Prompt Manager
 
-Load prompt templates from the prompts directory.
+Load and render Markdown prompt templates.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from string import Template
+from typing import Any
 
 
-class PromptNotFoundError(FileNotFoundError):
-    """
-    Prompt file not found.
-    """
+class PromptError(Exception):
+    """Base prompt exception."""
+
+
+class PromptNotFoundError(PromptError):
+    """Prompt file does not exist."""
+
+
+class PromptRenderError(PromptError):
+    """Prompt rendering failed."""
+
+
+_VARIABLE_PATTERN = re.compile(r"{{\s*([a-zA-Z0-9_]+)\s*}}")
 
 
 class PromptManager:
     """
-    Load prompts from Markdown files.
+    Prompt template manager.
+
+    Supports:
+
+    - Markdown prompts
+    - Cache
+    - Variable rendering
+    - Hot reload
     """
 
     def __init__(
@@ -29,18 +48,16 @@ class PromptManager:
 
         self._cache: dict[str, str] = {}
 
+    # ---------------------------------------------------------
+    # Loading
+    # ---------------------------------------------------------
+
     def load(
         self,
         name: str,
         *,
         use_cache: bool = True,
     ) -> str:
-        """
-        Load a prompt.
-
-        Example:
-            load("reasoner")
-        """
 
         if use_cache and name in self._cache:
             return self._cache[name]
@@ -60,12 +77,78 @@ class PromptManager:
 
         return text
 
-    def clear_cache(self) -> None:
+    # ---------------------------------------------------------
+    # Rendering
+    # ---------------------------------------------------------
+
+    def render(
+        self,
+        name: str,
+        **variables: Any,
+    ) -> str:
         """
-        Clear prompt cache.
+        Render prompt.
+
+        Example:
+
+            render(
+                "chat",
+                language="vi",
+                history="...",
+            )
         """
 
+        prompt = self.load(name)
+
+        #
+        # Convert
+        #
+        # {{name}}
+        #
+        # ->
+        #
+        # ${name}
+        #
+
+        template = _VARIABLE_PATTERN.sub(
+            lambda m: "${" + m.group(1) + "}",
+            prompt,
+        )
+
+        try:
+
+            return Template(template).substitute(
+                {
+                    key: "" if value is None else str(value)
+                    for key, value in variables.items()
+                }
+            )
+
+        except KeyError as exc:
+
+            raise PromptRenderError(
+                f"Missing variable: {exc.args[0]}"
+            ) from exc
+
+    # ---------------------------------------------------------
+    # Cache
+    # ---------------------------------------------------------
+
+    def clear(self) -> None:
+
         self._cache.clear()
+
+    def reload(
+        self,
+        name: str,
+    ) -> str:
+
+        self._cache.pop(name, None)
+
+        return self.load(
+            name,
+            use_cache=False,
+        )
 
 
 prompt_manager = PromptManager()
