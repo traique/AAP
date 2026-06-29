@@ -1,9 +1,5 @@
 """
-AI Assistant Platform (AAP)
-
-core/tool.py
-
-Tool Registry & Base Tool
+AAP Tool Framework
 """
 
 from __future__ import annotations
@@ -12,26 +8,16 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from core.context import RequestContext
+from core.manifest import ToolManifest
 from core.models import ToolResult
-
-
-# ==========================================================
-# Base Tool
-# ==========================================================
 
 
 class BaseTool(ABC):
     """
-    Base class của mọi Tool.
+    Base class of every Tool.
     """
 
-    name: str = ""
-
-    description: str = ""
-
-    version: str = "1.0.0"
-
-    enabled: bool = True
+    manifest: ToolManifest
 
     @abstractmethod
     async def execute(
@@ -45,14 +31,14 @@ class BaseTool(ABC):
         raise NotImplementedError
 
 
-# ==========================================================
-# Registry
-# ==========================================================
-
-
 class ToolRegistry:
+    """
+    Runtime Tool Registry.
 
-    def __init__(self):
+    Stores Tool instances.
+    """
+
+    def __init__(self) -> None:
 
         self._tools: dict[str, BaseTool] = {}
 
@@ -61,13 +47,15 @@ class ToolRegistry:
         tool: BaseTool,
     ) -> None:
 
-        if tool.name in self._tools:
+        name = tool.manifest.name
+
+        if name in self._tools:
 
             raise ValueError(
-                f"Tool '{tool.name}' already registered."
+                f"Tool '{name}' already registered."
             )
 
-        self._tools[tool.name] = tool
+        self._tools[name] = tool
 
     def unregister(
         self,
@@ -81,13 +69,15 @@ class ToolRegistry:
         name: str,
     ) -> BaseTool:
 
-        if name not in self._tools:
+        try:
+
+            return self._tools[name]
+
+        except KeyError as exc:
 
             raise KeyError(
                 f"Tool '{name}' not found."
-            )
-
-        return self._tools[name]
+            ) from exc
 
     def exists(
         self,
@@ -96,52 +86,11 @@ class ToolRegistry:
 
         return name in self._tools
 
-    def list(self) -> list[str]:
+    def list(
+        self,
+    ) -> list[str]:
 
         return sorted(self._tools.keys())
 
-    async def execute(
-        self,
-        name: str,
-        context: RequestContext,
-        **kwargs: Any,
-    ) -> ToolResult:
-
-        tool = self.get(name)
-
-        return await tool.execute(
-            context=context,
-            **kwargs,
-        )
-
 
 tool_registry = ToolRegistry()
-
-
-# ==========================================================
-# Decorator
-# ==========================================================
-
-
-def tool(
-    *,
-    name: str,
-    description: str,
-):
-    """
-    Register tool automatically.
-    """
-
-    def wrapper(cls):
-
-        instance = cls()
-
-        instance.name = name
-
-        instance.description = description
-
-        tool_registry.register(instance)
-
-        return cls
-
-    return wrapper
