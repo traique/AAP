@@ -1,10 +1,12 @@
 """
-AAP Gemini LLM Adapter
+AAP Gemini Adapter
 
 Bridge between AAP Runtime and GeminiClient.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from adapters.clients.gemini_client import (
     GeminiClient,
@@ -28,7 +30,7 @@ class GeminiAdapter(LLMAdapter):
     - Convert GeminiResult -> LLMResponse
 
     This class MUST NOT
-
+    -------------------
     - Parse JSON
     - Know Goal
     - Know Planner
@@ -53,7 +55,6 @@ class GeminiAdapter(LLMAdapter):
         self,
         client: GeminiClient,
     ) -> None:
-
         self._client = client
 
     async def generate(
@@ -63,29 +64,27 @@ class GeminiAdapter(LLMAdapter):
         prompt: str,
         system_prompt: str | None = None,
         temperature: float = 0.7,
-        **kwargs,
+        **kwargs: Any,
     ) -> LLMResponse:
         """
         Generate text using Gemini.
         """
 
-        final_prompt = self._build_prompt(
+        final_prompt = self._merge_prompt(
             system_prompt=system_prompt,
             prompt=prompt,
         )
 
         result: GeminiResult = await self._client.generate(
             prompt=final_prompt,
+            temperature=temperature,
+            **kwargs,
         )
 
-        return LLMResponse(
-            text=result.text,
-            usage={},
-            finish_reason="stop",
-        )
+        return self._to_response(result)
 
     @staticmethod
-    def _build_prompt(
+    def _merge_prompt(
         *,
         system_prompt: str | None,
         prompt: str,
@@ -95,9 +94,30 @@ class GeminiAdapter(LLMAdapter):
         """
 
         if not system_prompt:
-            return prompt
+            return prompt.strip()
 
         return (
             f"{system_prompt.strip()}\n\n"
             f"{prompt.strip()}"
+        )
+
+    @staticmethod
+    def _to_response(
+        result: GeminiResult,
+    ) -> LLMResponse:
+        """
+        Convert GeminiResult into LLMResponse.
+        """
+
+        return LLMResponse(
+            text=result.text,
+            provider=result.provider,
+            model=result.model,
+            finish_reason=result.finish_reason,
+            latency=result.latency,
+            usage=result.usage,
+            metadata={
+                "images": len(result.images),
+                "videos": len(result.videos),
+            },
         )
