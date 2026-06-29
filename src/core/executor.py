@@ -1,21 +1,22 @@
 """
-AAP Core Executor
+AAP Executor
 
-Thực thi ExecutionPlan.
+Execute an ExecutionPlan.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
+from core.capabilities import Capability
 from core.context import RequestContext
-from core.models import ExecutionPlan, ToolResult
+from core.models import ToolResult
+from core.plan import ExecutionPlan
+from core.provider_resolver import provider_resolver
 from core.tool import tool_registry
 
 
 class Executor:
     """
-    Thực thi từng Task trong ExecutionPlan.
+    Execute every task inside an ExecutionPlan.
     """
 
     async def execute(
@@ -30,14 +31,44 @@ class Executor:
 
             tool = tool_registry.get(task.tool)
 
-            result = await tool.execute(
-                context=context,
-                **task.input,
+            capability: Capability = tool.manifest.category.to_capability()
+
+            providers = provider_resolver.resolve_all(
+                capability,
             )
 
-            results.append(result)
+            last_error: Exception | None = None
+
+            for provider in providers:
+
+                try:
+
+                    result = await tool.execute(
+                        context=context,
+                        provider=provider.adapter,
+                        **task.input,
+                    )
+
+                    results.append(result)
+
+                    last_error = None
+
+                    break
+
+                except Exception as exc:
+
+                    last_error = exc
+
+                    #
+                    # TODO
+                    # metrics
+                    # circuit breaker
+                    #
+
+                    continue
+
+            if last_error:
+
+                raise last_error
 
         return results
-
-
-executor = Executor()
