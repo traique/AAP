@@ -1,79 +1,47 @@
 """
 AAP Runtime
-
-Main execution pipeline.
 """
 
 from __future__ import annotations
 
 from core.context import RequestContext
-from core.executor import executor
-from core.models import ExecutionPlan, ToolResult
+from core.executor import Executor
+from core.plan import ExecutionPlan
+from core.planner import Planner
+from core.reasoning_engine import ReasoningEngine
 
 
 class Runtime:
 
     def __init__(
-
         self,
+        *,
+        reasoner: ReasoningEngine,
+        planner: Planner,
+        executor: Executor,
+    ) -> None:
 
-        reasoner,
-
-        planner,
-
-    ):
-
-        self.reasoner = reasoner
-
-        self.planner = planner
+        self._reasoner = reasoner
+        self._planner = planner
+        self._executor = executor
 
     async def run(
-
         self,
-
         context: RequestContext,
-
         message: str,
+    ):
 
-    ) -> list[ToolResult]:
-
-        #
-        # 1
-        # Reasoning
-        #
-
-        decision = await self.reasoner.reason(
-
+        goal = await self._reasoner.reason(
             context=context,
-
             message=message,
-
         )
 
-        #
-        # 2
-        # Planning
-        #
-
-        plan: ExecutionPlan = await self.planner.plan(
-
+        plan: ExecutionPlan = await self._planner.create_plan(
             context=context,
-
-            goal=decision,
-
+            goal=goal,
         )
 
-        #
-        # 3
-        # Execute
-        #
-
-        results = await executor.execute(
-
+        return await self._executor.execute(
             context=context,
-
             plan=plan,
-
         )
-
-        return results
