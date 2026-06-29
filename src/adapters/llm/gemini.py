@@ -1,13 +1,15 @@
 """
-AAP Gemini Adapter
+AAP Gemini LLM Adapter
 
-LLM Adapter implementation for Gemini.
+Bridge between AAP Runtime and GeminiClient.
 """
 
 from __future__ import annotations
 
-import json
-
+from adapters.clients.gemini_client import (
+    GeminiClient,
+    GeminiResult,
+)
 from adapters.llm.base import (
     LLMAdapter,
     LLMResponse,
@@ -17,10 +19,20 @@ from core.context import RequestContext
 
 class GeminiAdapter(LLMAdapter):
     """
-    Gemini Adapter.
+    Gemini implementation of LLMAdapter.
 
-    Không phụ thuộc trực tiếp vào gemini-webapi.
-    Chỉ làm việc với GeminiClient.
+    Responsibilities
+    ----------------
+    - Build final prompt
+    - Call GeminiClient
+    - Convert GeminiResult -> LLMResponse
+
+    This class MUST NOT
+
+    - Parse JSON
+    - Know Goal
+    - Know Planner
+    - Know Telegram
     """
 
     name = "gemini"
@@ -39,10 +51,10 @@ class GeminiAdapter(LLMAdapter):
 
     def __init__(
         self,
-        client,
-    ):
+        client: GeminiClient,
+    ) -> None:
 
-        self.client = client
+        self._client = client
 
     async def generate(
         self,
@@ -53,58 +65,39 @@ class GeminiAdapter(LLMAdapter):
         temperature: float = 0.7,
         **kwargs,
     ) -> LLMResponse:
+        """
+        Generate text using Gemini.
+        """
 
-        #
-        # Ghép System Prompt
-        #
+        final_prompt = self._build_prompt(
+            system_prompt=system_prompt,
+            prompt=prompt,
+        )
 
-        final_prompt = prompt
-
-        if system_prompt:
-
-            final_prompt = (
-                f"{system_prompt}\n\n"
-                f"{prompt}"
-            )
-
-        #
-        # Call Gemini Client
-        #
-
-        result = await self.client.generate(
+        result: GeminiResult = await self._client.generate(
             prompt=final_prompt,
-            temperature=temperature,
-            **kwargs,
         )
 
         return LLMResponse(
             text=result.text,
-            usage=getattr(result, "usage", {}),
-            finish_reason=getattr(
-                result,
-                "finish_reason",
-                None,
-            ),
+            usage={},
+            finish_reason="stop",
         )
 
-    async def generate_json(
-        self,
+    @staticmethod
+    def _build_prompt(
         *,
-        context: RequestContext,
+        system_prompt: str | None,
         prompt: str,
-        system_prompt: str | None = None,
-        **kwargs,
-    ) -> dict:
+    ) -> str:
+        """
+        Merge system prompt and user prompt.
+        """
 
-        response = await self.generate(
-            context=context,
-            prompt=prompt,
-            system_prompt=system_prompt,
-            **kwargs,
+        if not system_prompt:
+            return prompt
+
+        return (
+            f"{system_prompt.strip()}\n\n"
+            f"{prompt.strip()}"
         )
-
-        #
-        # Validate JSON
-        #
-
-        return json.loads(response.text)
