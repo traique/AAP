@@ -1,5 +1,5 @@
 """
-Default Planner
+AAP Default Planner
 """
 
 from __future__ import annotations
@@ -8,11 +8,15 @@ from uuid import uuid4
 
 from core.context import RequestContext
 from core.goal import Goal, GoalType
-from core.models import ExecutionPlan, Task
+from core.plan import ExecutionPlan
 from core.planner import Planner
+from core.task import Task
 
 
 class DefaultPlanner(Planner):
+    """
+    Default planner implementation.
+    """
 
     async def create_plan(
         self,
@@ -20,66 +24,60 @@ class DefaultPlanner(Planner):
         goal: Goal,
     ) -> ExecutionPlan:
 
-        tasks: list[Task] = []
+        plan = ExecutionPlan()
 
         match goal.type:
 
             case GoalType.CHAT:
 
-                tasks.append(
+                plan.add(
                     Task(
                         id=str(uuid4()),
+                        name="General Chat",
                         tool="chat",
                         input={
-                            "goal": goal.model_dump(),
+                            "message": goal.objective,
                         },
                     )
                 )
 
             case GoalType.CONTENT:
 
-                tasks.append(
+                plan.add(
                     Task(
                         id=str(uuid4()),
-                        tool="write_content",
+                        name="Write Content",
+                        tool="content",
                         input={
-                            "goal": goal.model_dump(),
+                            "goal": goal,
                         },
                     )
                 )
 
             case GoalType.IMAGE:
 
-                tasks.append(
+                plan.add(
                     Task(
                         id=str(uuid4()),
+                        name="Generate Image",
                         tool="generate_image",
                         input={
-                            "goal": goal.model_dump(),
+                            "goal": goal,
                         },
                     )
-                )
-
-            case GoalType.MULTI_STEP:
-
-                #
-                # Sprint sau
-                #
-
-                raise NotImplementedError(
-                    "Multi-step planner chưa được triển khai."
                 )
 
             case _:
 
-                tasks.append(
+                plan.add(
                     Task(
                         id=str(uuid4()),
+                        name="Fallback Chat",
                         tool="chat",
                         input={
-                            "goal": goal.model_dump(),
+                            "message": goal.objective,
                         },
                     )
                 )
 
-        return ExecutionPlan(tasks=tasks)
+        return plan
