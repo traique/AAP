@@ -6,9 +6,9 @@ Execute an ExecutionPlan.
 
 from __future__ import annotations
 
-from core.capabilities import Capability
 from core.context import RequestContext
-from core.models import ToolResult
+from core.errors import ProviderNotFoundError
+from core.models import ExecutionResult
 from core.plan import ExecutionPlan
 from core.provider_resolver import provider_resolver
 from core.tool import tool_registry
@@ -16,26 +16,30 @@ from core.tool import tool_registry
 
 class Executor:
     """
-    Execute every task inside an ExecutionPlan.
+    Execute every task in an ExecutionPlan.
     """
 
     async def execute(
         self,
         context: RequestContext,
         plan: ExecutionPlan,
-    ) -> list[ToolResult]:
+    ) -> ExecutionResult:
 
-        results: list[ToolResult] = []
+        execution = ExecutionResult()
 
         for task in plan.tasks:
 
             tool = tool_registry.get(task.tool)
 
-            capability: Capability = tool.manifest.category.to_capability()
-
             providers = provider_resolver.resolve_all(
-                capability,
+                tool.manifest.capability,
             )
+
+            if not providers:
+                raise ProviderNotFoundError(
+                    f"No provider found for capability "
+                    f"'{tool.manifest.capability.value}'."
+                )
 
             last_error: Exception | None = None
 
@@ -49,9 +53,16 @@ class Executor:
                         **task.input,
                     )
 
-                    results.append(result)
+                    execution.results.append(result)
 
                     last_error = None
+
+                    #
+                    # TODO
+                    #
+                    # metrics.record_success(...)
+                    # health.record_success(...)
+                    #
 
                     break
 
@@ -61,14 +72,17 @@ class Executor:
 
                     #
                     # TODO
-                    # metrics
-                    # circuit breaker
+                    #
+                    # metrics.record_failure(...)
+                    # health.record_failure(...)
                     #
 
                     continue
 
             if last_error:
 
+                execution.success = False
+
                 raise last_error
 
-        return results
+        return execution
