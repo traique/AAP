@@ -1,50 +1,23 @@
 """
-AI Assistant Platform (AAP)
-
-core/provider_manager.py
-
-Provider Runtime Manager
+AAP Provider Manager
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
 
 from core.capabilities import Capability
-from core.contracts import Provider
-from core.policy import (
-    SelectionStrategy,
-    policy_engine,
-)
 
 
 @dataclass(slots=True)
-class ProviderState:
+class ProviderDescriptor:
     """
-    Runtime state của Provider.
-    """
-
-    healthy: bool = True
-
-    failure_count: int = 0
-
-    success_count: int = 0
-
-    last_error: str | None = None
-
-    disabled_until: datetime | None = None
-
-
-@dataclass(slots=True)
-class ProviderInfo:
-    """
-    Metadata của Provider.
+    Provider metadata.
     """
 
     name: str
 
-    provider: Provider
+    adapter: object
 
     capabilities: set[Capability]
 
@@ -54,146 +27,29 @@ class ProviderInfo:
 
     enabled: bool = True
 
-    state: ProviderState = field(
-        default_factory=ProviderState,
-    )
+    metadata: dict = field(default_factory=dict)
 
 
 class ProviderManager:
 
-    def __init__(self):
+    def __init__(self) -> None:
 
-        self._providers: dict[str, ProviderInfo] = {}
-
-    # ==========================================================
-    # REGISTER
-    # ==========================================================
+        self._providers: list[
+            ProviderDescriptor
+        ] = []
 
     def register(
         self,
-        provider: ProviderInfo,
-    ):
+        provider: ProviderDescriptor,
+    ) -> None:
 
-        if provider.name in self._providers:
+        self._providers.append(provider)
 
-            raise ValueError(
-                f"Provider '{provider.name}' already exists."
-            )
+    def all(self) -> list[
+        ProviderDescriptor
+    ]:
 
-        self._providers[provider.name] = provider
-
-    # ==========================================================
-    # FIND
-    # ==========================================================
-
-    def find(
-        self,
-        capability: Capability,
-    ) -> list[ProviderInfo]:
-
-        candidates = []
-
-        now = datetime.now(UTC)
-
-        for provider in self._providers.values():
-
-            if not provider.enabled:
-                continue
-
-            if capability not in provider.capabilities:
-                continue
-
-            if (
-                provider.state.disabled_until
-                and provider.state.disabled_until > now
-            ):
-                continue
-
-            candidates.append(provider)
-
-        policy = policy_engine.get(capability)
-
-        if policy.strategy == SelectionStrategy.PRIORITY:
-
-            candidates.sort(
-                key=lambda p: p.priority
-            )
-
-        elif policy.strategy == SelectionStrategy.BEST_SCORE:
-
-            candidates.sort(
-                key=lambda p: p.score,
-                reverse=True,
-            )
-
-        return candidates
-
-    # ==========================================================
-    # SUCCESS
-    # ==========================================================
-
-    def report_success(
-        self,
-        name: str,
-    ):
-
-        provider = self._providers[name]
-
-        provider.state.success_count += 1
-
-        provider.state.failure_count = 0
-
-        provider.state.last_error = None
-
-        provider.state.disabled_until = None
-
-    # ==========================================================
-    # FAILURE
-    # ==========================================================
-
-    def report_failure(
-        self,
-        name: str,
-        error: str,
-    ):
-
-        provider = self._providers[name]
-
-        provider.state.failure_count += 1
-
-        provider.state.last_error = error
-
-        #
-        # Circuit Breaker
-        #
-
-        if provider.state.failure_count >= 3:
-
-            provider.state.disabled_until = (
-                datetime.now(UTC)
-                + timedelta(
-                    minutes=10
-                )
-            )
-
-    # ==========================================================
-    # GET
-    # ==========================================================
-
-    def get(
-        self,
-        name: str,
-    ) -> ProviderInfo:
-
-        return self._providers[name]
-
-    # ==========================================================
-    # LIST
-    # ==========================================================
-
-    def list(self) -> list[ProviderInfo]:
-
-        return list(self._providers.values())
+        return list(self._providers)
 
 
 provider_manager = ProviderManager()
