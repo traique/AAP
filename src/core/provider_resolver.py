@@ -1,48 +1,52 @@
 """
-AAP Core Provider Resolver
-
-Chịu trách nhiệm chọn Provider phù hợp.
+AAP Provider Resolver
 """
 
 from __future__ import annotations
 
 from core.capabilities import Capability
 from core.provider_manager import (
-    ProviderInfo,
+    ProviderDescriptor,
     provider_manager,
 )
-from core.policy import policy_engine
 
 
 class ProviderResolver:
     """
-    Resolve provider theo Capability và Policy.
+    Resolve providers for a capability.
     """
 
-    def resolve(
+    def resolve_all(
         self,
         capability: Capability,
-    ) -> ProviderInfo:
+    ) -> list[
+        ProviderDescriptor
+    ]:
 
-        providers = provider_manager.find(capability)
+        providers = [
 
-        if not providers:
+            provider
 
-            raise RuntimeError(
-                f"No provider supports '{capability.value}'."
+            for provider in provider_manager.all()
+
+            if (
+                provider.enabled
+                and capability
+                in provider.capabilities
             )
+        ]
 
-        #
-        # Hiện tại ProviderManager đã sort theo Policy.
-        # Sau này có thể bổ sung:
-        #
-        # - Cost
-        # - Health Score
-        # - Region
-        # - User Tier
-        #
+        providers.sort(
 
-        return providers[0]
+            key=lambda p: (
+                p.score,
+                -p.priority,
+            ),
+
+            reverse=True,
+        )
+
+        return providers
 
 
 provider_resolver = ProviderResolver()
